@@ -1,0 +1,44 @@
+#!/bin/sh
+#
+# An example hook script to prepare a packed repository for use over
+# dumb transports.
+#
+# To enable this hook, rename this file to "post-update".
+#
+## store the arguments given to the script
+read oldrev newrev refname
+
+## Where to store the log information about the updates
+LOGFILE=./post-receive.log
+
+# The deployed directory (the running site)
+DEPLOYDIR=/home/git/junosconf
+
+##  Record the fact that the push has been received
+echo -e "Received Push Request at $( date +%F )" >> $LOGFILE
+echo " - Old SHA: $oldrev New SHA: $newrev Branch Name: $refname" >> $LOGFILE
+
+## Update the deployed copy
+echo "Starting Deploy" >> $LOGFILE
+
+echo " - Starting code update"
+GIT_WORK_TREE="$DEPLOYDIR" git checkout -f
+echo " - Finished code update"
+
+echo " - Generate Config"
+for i in $(find $DEPLOYDIR -name \*.csv); do
+    python3 /home/git/junosconf.py $i > "$i".conf
+    sed -i '1cconfigure' "$i".conf
+    echo "commit and-quit" >> "$i".conf
+
+done
+echo " - Finished Generate Config"
+
+echo " - update Device"
+for i in $(find $DEPLOYDIR -name \*.conf -type f -printf "%f\n"); do
+    echo $i | cut -d. -f1  | xargs /var/lib/rancid/bin/jlogin -x $DEPLOYDIR/$i
+    ##/opt/rancid/bin/jlogin -x $i
+done
+echo " - Finished update Device"
+
+echo "Finished Deploy" >> $LOGFILE
